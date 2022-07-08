@@ -1,4 +1,4 @@
-package db
+package databaseexperiment
 
 import (
 	"bufio"

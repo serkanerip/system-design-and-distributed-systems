@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database-experiment/db"
+	db "database-experiment"
 	"database-experiment/index"
 	"encoding/json"
 	"github.com/gin-gonic/gin"
