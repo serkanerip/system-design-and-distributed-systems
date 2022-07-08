@@ -26,22 +26,26 @@ func (m *HashMapIndex) Recover(key, offset string) {
 	m.Set(key, offset)
 }
 
-func (m *HashMapIndex) Get(key string) string {
+func (m *HashMapIndex) Get(key string) (string, error) {
 	m.RLock()
 	defer m.RUnlock()
-	return m.hm[key]
+	data, exists := m.hm[key]
+	if !exists {
+		return "", ErrKeyNotFound
+	}
+	return data, nil
 }
 
 func (m *HashMapIndex) Set(key, offset string) {
 	m.Lock()
 	defer m.Unlock()
-	if _, exists := m.hm[key]; !exists {
+	if _, exists := m.hm[key]; !exists && entryCount != nil {
 		entryCount.Inc()
 	}
 	m.hm[key] = offset
 }
 
-func NewMemoryIndex() Index {
+func NewHashMapIndex() Index {
 	return &HashMapIndex{
 		hm: map[string]string{},
 	}

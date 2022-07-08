@@ -24,13 +24,13 @@ type CreateKeyValuePair struct {
 }
 
 var (
-	createdPersons = make(chan Person, 40)
+	createdPersons = make(chan Person, 1000)
 )
 
 func main() {
 	go func() {
 		for person := range createdPersons {
-			time.Sleep(time.Millisecond * 200)
+			time.Sleep(time.Millisecond * 100)
 			get, err := http.Get("http://localhost:3000/db/" + person.ID)
 			if err != nil {
 				panic(err)
@@ -43,10 +43,10 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
-	for i := 1; i < 2; i++ {
+	uptimeTicker := time.NewTicker(5 * time.Minute)
+	for i := 1; i < 40; i++ {
 		wg.Add(1)
 		go func() {
-			uptimeTicker := time.NewTicker(5 * time.Minute)
 			for {
 				select {
 				case <-uptimeTicker.C:
@@ -55,7 +55,7 @@ func main() {
 					return
 				default:
 					createPerson()
-					// time.Sleep(time.Millisecond * 500)
+					time.Sleep(time.Millisecond * 50)
 				}
 			}
 		}()

@@ -14,13 +14,17 @@ var (
 )
 
 func main() {
-	database = db.NewDatabase(index.NewMemoryIndex(), true)
+	database = db.NewDatabase()
 	defer database.Close()
 	startHttpServer()
 }
 
 func startHttpServer() {
 	r := gin.Default()
+	r.GET("/segments", func(c *gin.Context) {
+		c.JSON(200, database.SegmentsInfo())
+	})
+
 	r.GET("/prom_metrics", func(c *gin.Context) {
 		h := promhttp.Handler()
 		h.ServeHTTP(c.Writer, c.Request)
@@ -34,11 +38,15 @@ func startHttpServer() {
 
 	r.GET("/db/:key", func(c *gin.Context) {
 		key := c.Param("key")
-		val := database.Get(key)
+		val, err := database.Get(key)
 		status := 200
-		if val == "" {
-			status = 404
+		if err != nil {
+			status = 500
+			if err == index.ErrKeyNotFound {
+				status = 404
+			}
 		}
+
 		c.JSON(status, map[string]string{
 			"value": val,
 		})
