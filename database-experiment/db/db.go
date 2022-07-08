@@ -21,16 +21,19 @@ type Database struct {
 	file          *os.File
 }
 
-func NewDatabase(indexStrategy index.Index) *Database {
+func NewDatabase(indexStrategy index.Index, promMetrics bool) *Database {
 	db := &Database{
 		regexForAll:   regexp.MustCompile(`(?m)^([a-zA-Z\-0-9]+),(.+),([\da-g]+)$`),
 		regexPattern:  `(?m)^($key$),(.+),([\da-g]+)$`,
 		indexStrategy: indexStrategy,
 	}
 	var fileErr error
-	db.file, fileErr = os.OpenFile("db.data", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0)
+	db.file, fileErr = os.OpenFile("/Users/serkanerip/workspace/tmp/db.data", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0)
 	if fileErr != nil {
 		panic(fileErr)
+	}
+	if promMetrics {
+		db.collectPromMetrics()
 	}
 	db.Recover()
 
@@ -51,7 +54,7 @@ func (db *Database) Close() {
 	db.file.Close()
 }
 
-func (db *Database) CollectPromMetrics() {
+func (db *Database) collectPromMetrics() {
 	db.indexStrategy.CollectPromMetrics()
 }
 
