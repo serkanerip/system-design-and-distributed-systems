@@ -65,6 +65,7 @@ func (db *Database) Close() {
 }
 
 func (db *Database) Get(key string) (interface{}, error) {
+	pmTotalReads.Inc()
 	data, err := db.currentSegment.Read(key)
 	if err == nil {
 		if data.(string) == tombstoneValue {
@@ -83,6 +84,7 @@ func (db *Database) Get(key string) (interface{}, error) {
 }
 
 func (db *Database) Set(key string, value interface{}) error {
+	pmTotalWrites.Inc()
 	err := db.currentSegment.Write(key, value)
 	if err != nil {
 		fmt.Printf("couldn't set key %s err is: %v\n", key, err)

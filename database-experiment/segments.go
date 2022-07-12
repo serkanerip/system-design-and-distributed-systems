@@ -111,8 +111,7 @@ func (s *segment) indexTheLine(sid string, line []byte) {
 		fmt.Println("data is corrupted!")
 		return
 	}
-	fmt.Println(row.Value)
-	if row.Value.(string) == tombstoneValue {
+	if val, ok := row.Value.(string); ok == true && val == tombstoneValue {
 		fmt.Println("tombstone")
 		s.indexStrategy.Delete(row.Key)
 		return
@@ -329,6 +328,7 @@ func (s *Segments) IsCompactionInProgress() bool {
 
 func (s *Segments) Add(seg Segment) {
 	s.segmentsLock.Lock()
+	pmSegmentCount.Inc()
 	defer s.segmentsLock.Unlock()
 	s.segments = append(s.segments, seg)
 }
@@ -336,6 +336,7 @@ func (s *Segments) Add(seg Segment) {
 func (s *Segments) Delete(id string) error {
 	s.segmentsLock.Lock()
 	defer s.segmentsLock.Unlock()
+	pmSegmentCount.Dec()
 	segmentIndex := -1
 	for i := range s.segments {
 		if s.segments[i].GetId() == id {
@@ -406,6 +407,8 @@ func (s *Segments) Merge() {
 		fmt.Printf("Merge done in %f seconds.\n", time.Now().Sub(startTime).Seconds())
 	}
 
+	pmTotalMerge.Inc()
+
 	newSegment := NewWritableSegment(getFileAbsolutePath(generateDataFileName()), index.NewHashMapIndex())
 	for i := range compactedSegments {
 		keys := compactedSegments[i].GetUniqueKeys()
@@ -449,6 +452,12 @@ func (s *Segments) Compaction() {
 		}
 	}
 
+	if len(segmentsThatNeedCompaction) < 1 {
+		s.compactionInProgress = false
+		fmt.Printf("Compaction done in %f seconds.\n", time.Now().Sub(startTime).Seconds())
+	}
+	pmTotalCompaction.Inc()
+
 	var wg sync.WaitGroup
 	for _, seg := range segmentsThatNeedCompaction {
 		wg.Add(1)
@@ -477,8 +486,6 @@ func (s *Segments) Compaction() {
 		}(seg)
 	}
 	wg.Wait()
-	s.compactionInProgress = false
-	fmt.Printf("Compaction done in %f seconds.\n", time.Now().Sub(startTime).Seconds())
 }
 
 func NewSegments() *Segments {
