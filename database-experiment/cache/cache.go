@@ -1,8 +1,8 @@
 package cache
 
 import (
+	"fmt"
 	"github.com/vmihailenco/msgpack/v5"
-	"log"
 	"sync"
 	"time"
 )
@@ -83,7 +83,7 @@ func (m *MemoryCache) Set(key, value string) {
 }
 
 func (m *MemoryCache) optimize() {
-	log.Println("Starting to optimize memcache!")
+	fmt.Println("Starting to optimize memcache!")
 	deletedCount := 0
 	for key := range m.elements {
 		secondsPassedSinceAdded := time.Now().Sub(m.elements[key].lastUsageTime).Seconds()
@@ -97,5 +97,5 @@ func (m *MemoryCache) optimize() {
 			deletedCount += 1
 		}
 	}
-	log.Printf("Optimizing finished, deleted %d keys!\n", deletedCount)
+	fmt.Printf("Optimizing finished, deleted %d keys!\n", deletedCount)
 }

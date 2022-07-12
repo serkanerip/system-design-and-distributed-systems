@@ -4,26 +4,30 @@ import (
 	db "database-experiment"
 	"database-experiment/index"
 	"encoding/json"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
+	"sync"
 )
 
 var (
 	database *db.Database
+	wg       sync.WaitGroup
 )
 
 func main() {
+	wg.Add(1)
+	go startHttpServer()
 	database = db.NewDatabase()
 	defer database.Close()
-	startHttpServer()
+	wg.Wait()
 }
 
 func startHttpServer() {
 	r := gin.Default()
-	r.GET("/segments", func(c *gin.Context) {
-		c.JSON(200, database.SegmentsInfo())
-	})
+
+	pprof.Register(r)
 
 	r.GET("/prom_metrics", func(c *gin.Context) {
 		h := promhttp.Handler()
@@ -47,7 +51,7 @@ func startHttpServer() {
 			}
 		}
 
-		c.JSON(status, map[string]string{
+		c.JSON(status, map[string]interface{}{
 			"value": val,
 		})
 	})
@@ -69,4 +73,5 @@ func startHttpServer() {
 	})
 
 	log.Fatal(r.Run(":3000"))
+	wg.Done()
 }

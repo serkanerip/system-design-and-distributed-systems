@@ -6,9 +6,22 @@ import (
 	"sync"
 )
 
+type Record struct {
+	Offset       string
+	CreationTime int64
+}
+
 type HashMapIndex struct {
 	sync.RWMutex
-	hm map[string]string
+	hm map[string]Record
+}
+
+func (m *HashMapIndex) AllKeys() []string {
+	var keys []string
+	for key := range m.hm {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 var (
@@ -22,10 +35,6 @@ func (m *HashMapIndex) CollectPromMetrics() {
 	})
 }
 
-func (m *HashMapIndex) Recover(key, offset string) {
-	m.Set(key, offset)
-}
-
 func (m *HashMapIndex) Get(key string) (string, error) {
 	m.RLock()
 	defer m.RUnlock()
@@ -33,20 +42,33 @@ func (m *HashMapIndex) Get(key string) (string, error) {
 	if !exists {
 		return "", ErrKeyNotFound
 	}
-	return data, nil
+	return data.Offset, nil
 }
 
-func (m *HashMapIndex) Set(key, offset string) {
+func (m *HashMapIndex) GetCreationTime(key string) (int64, error) {
+	m.RLock()
+	defer m.RUnlock()
+	data, exists := m.hm[key]
+	if !exists {
+		return 0, ErrKeyNotFound
+	}
+	return data.CreationTime, nil
+}
+
+func (m *HashMapIndex) Set(key, offset string, creationTime int64) {
 	m.Lock()
 	defer m.Unlock()
 	if _, exists := m.hm[key]; !exists && entryCount != nil {
 		entryCount.Inc()
 	}
-	m.hm[key] = offset
+	m.hm[key] = Record{
+		Offset:       offset,
+		CreationTime: creationTime,
+	}
 }
 
 func NewHashMapIndex() Index {
 	return &HashMapIndex{
-		hm: map[string]string{},
+		hm: map[string]Record{},
 	}
 }

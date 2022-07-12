@@ -8,7 +8,8 @@ var (
 
 type Index interface {
 	Get(key string) (string, error)
-	Set(key, offset string)
-	Recover(key, value string)
+	GetCreationTime(key string) (int64, error)
+	Set(key, offset string, creationTime int64)
+	AllKeys() []string
 	CollectPromMetrics()
 }

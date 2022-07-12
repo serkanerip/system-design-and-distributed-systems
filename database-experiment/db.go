@@ -1,55 +1,66 @@
 package databaseexperiment
 
 import (
+	"database-experiment/config"
 	"database-experiment/index"
 	"fmt"
-	"github.com/google/uuid"
 	"io/ioutil"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 type Database struct {
-	currentSegment       *writableSegment
-	segmentSizeThreshold int64
-	dataFilesFolderPath  string
-	frozenSegments       []Segment
-	segmentLock          sync.Mutex
+	currentSegment                   *writableSegment
+	segmentSizeThreshold             int64
+	frozenSegments                   *Segments
+	segmentLock                      sync.Mutex
+	newWritableSegmentInitInProgress bool
 }
 
 func NewDatabase() *Database {
 	db := &Database{
-		dataFilesFolderPath:  "/Users/serkanerip/workspace/tmp",
-		segmentSizeThreshold: 1_000_000,
-		frozenSegments:       []Segment{},
+		segmentSizeThreshold:             32_000_000,
+		frozenSegments:                   NewSegments(),
+		newWritableSegmentInitInProgress: false,
 	}
 	db.findSegments()
+	db.frozenSegments.Recover()
+	db.frozenSegments.Compaction()
+	db.frozenSegments.Merge()
 	db.currentSegment = NewWritableSegment(
-		db.getFileAbsolutePath(db.generateDataFileName()),
+		getFileAbsolutePath(generateDataFileName()),
 		index.NewHashMapIndex(),
 	)
-	db.Recover()
 
-	ticker := time.NewTicker(time.Minute * 1)
+	ticker := time.NewTicker(time.Minute * 5)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				db.compaction()
+				if !db.frozenSegments.compactionInProgress {
+					db.frozenSegments.Compaction()
+				}
+				if !db.frozenSegments.mergeInProgress {
+					db.frozenSegments.Merge()
+				}
+			default:
 			}
 		}
 	}()
 
+	fmt.Println("Database is ready!")
 	return db
 }
 
 func (db *Database) Close() {
-	db.currentSegment.Close()
+	err := db.currentSegment.Close()
+	if err != nil {
+		panic(err)
+	}
 }
 
-func (db *Database) Get(key string) (string, error) {
+func (db *Database) Get(key string) (interface{}, error) {
 	data, err := db.currentSegment.Read(key)
 	if err == nil {
 		return data, nil
@@ -57,75 +68,53 @@ func (db *Database) Get(key string) (string, error) {
 	if err != index.ErrKeyNotFound {
 		return "", err
 	}
-	for i := range db.frozenSegments {
-		data, err = db.frozenSegments[i].Read(key)
-		if err == nil {
-			return data, nil
-		}
-		if err != index.ErrKeyNotFound {
-			return "", err
-		}
+	data, err = db.frozenSegments.FindKeyInsideSegments(key)
+	if err != nil {
+		panic(err)
 	}
-	return "", index.ErrKeyNotFound
+	return data, nil
 }
 
-func (db *Database) Set(key, value string) {
-	db.currentSegment.Write(key, value)
+func (db *Database) Set(key string, value interface{}) error {
+	err := db.currentSegment.Write(key, value)
+	if err != nil {
+		fmt.Printf("couldn't set key %s err is: %v\n", key, err)
+		return err
+	}
 	go db.checkCurrentSegmentSize()
-}
-
-func (db *Database) Recover() {
-	db.currentSegment.RecoverIndex()
-	for i := range db.frozenSegments {
-		db.frozenSegments[i].RecoverIndex()
-	}
-}
-
-func (db *Database) compaction() {
-	fmt.Println("compaction")
+	return nil
 }
 
 func (db *Database) checkCurrentSegmentSize() {
 	fileInfo := db.currentSegment.GetFileInfo()
 	currentSegmentSize := fileInfo.Size()
-	if currentSegmentSize < db.segmentSizeThreshold {
+	if currentSegmentSize < db.segmentSizeThreshold ||
+		db.frozenSegments.IsCompactionInProgress() ||
+		db.newWritableSegmentInitInProgress {
 		return
 	}
+	db.newWritableSegmentInitInProgress = true
 	fmt.Println("Froze current segment it exceeded the threshold! Size: ", currentSegmentSize)
 	db.initNewWritableSegment()
+	db.newWritableSegmentInitInProgress = false
 }
 
 func (db *Database) initNewWritableSegment() {
 	if !db.segmentLock.TryLock() {
 		return // another process is doing check at the moment
 	}
-	fileName := db.generateDataFileName()
+	fileName := generateDataFileName()
 	oldSegment := db.currentSegment
 	db.currentSegment = NewWritableSegment(
-		db.getFileAbsolutePath(fileName),
+		getFileAbsolutePath(fileName),
 		index.NewHashMapIndex())
-	db.frozenSegments = append(db.frozenSegments, oldSegment.getImmutableSegment())
-	fmt.Println("Frozed old segment and new segment created!")
 	db.segmentLock.Unlock()
-}
-
-func (db *Database) generateDataFileName() string {
-	return fmt.Sprintf("%d-%s.data", time.Now().UnixNano(), uuid.New())
-}
-
-func (db *Database) SegmentsInfo() map[string]interface{} {
-	var frozens []string
-	for i := range db.frozenSegments {
-		frozens = append(frozens, db.frozenSegments[i].GetFileInfo().Name())
-	}
-	return map[string]interface{}{
-		"current":  db.currentSegment.GetFileInfo().Name(),
-		"fronzens": frozens,
-	}
+	db.frozenSegments.Add(oldSegment.getImmutableSegment())
+	fmt.Println("Frozed old segment and new segment created!")
 }
 
 func (db *Database) findSegments() {
-	fileInfos, err := ioutil.ReadDir(db.dataFilesFolderPath)
+	fileInfos, err := ioutil.ReadDir(config.DataFilesFolderPath)
 	if err != nil {
 		panic(err)
 		return
@@ -133,17 +122,11 @@ func (db *Database) findSegments() {
 
 	for _, fileInfo := range fileInfos {
 		fileName := fileInfo.Name()
-		absolutePath := db.getFileAbsolutePath(fileName)
+		absolutePath := getFileAbsolutePath(fileName)
 		if strings.Contains(fileName, ".data") {
-			db.frozenSegments = append(db.frozenSegments, NewImmutableSegment(absolutePath, index.NewHashMapIndex()))
+			db.frozenSegments.Add(NewImmutableSegment(absolutePath, index.NewHashMapIndex()))
 		}
 	}
 
-	sort.Slice(db.frozenSegments, func(i, j int) bool {
-		return db.frozenSegments[i].GetFileInfo().Name() > db.frozenSegments[j].GetFileInfo().Name()
-	})
-}
-
-func (db *Database) getFileAbsolutePath(fileName string) string {
-	return fmt.Sprintf("%s/%s", db.dataFilesFolderPath, fileName)
+	db.frozenSegments.Sort()
 }

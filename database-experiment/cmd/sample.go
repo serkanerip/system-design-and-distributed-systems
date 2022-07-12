@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/bxcodec/faker/v3"
 	"github.com/google/uuid"
 	"log"
@@ -12,11 +13,12 @@ import (
 )
 
 type Person struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Phone  string `json:"phone"`
-	Gender string `json:"gender"`
-	Email  string `json:"email"`
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Phone  string   `json:"phone"`
+	Gender string   `json:"gender"`
+	Email  string   `json:"email"`
+	X      []string `json:"x"`
 }
 
 type CreateKeyValuePair struct {
@@ -43,8 +45,8 @@ func main() {
 	}()
 
 	var wg sync.WaitGroup
-	uptimeTicker := time.NewTicker(5 * time.Minute)
-	for i := 1; i < 40; i++ {
+	uptimeTicker := time.NewTicker(30 * time.Minute)
+	for i := 1; i < 50; i++ {
 		wg.Add(1)
 		go func() {
 			for {
@@ -55,7 +57,7 @@ func main() {
 					return
 				default:
 					createPerson()
-					time.Sleep(time.Millisecond * 50)
+					time.Sleep(time.Millisecond * 200)
 				}
 			}
 		}()
@@ -65,11 +67,12 @@ func main() {
 
 func createPerson() {
 	p := Person{
-		ID:     uuid.New().String(),
+		ID:     fmt.Sprintf("%s-%d", uuid.New().String(), time.Now().UnixNano()),
 		Name:   faker.Name(),
 		Phone:  faker.Phonenumber(),
 		Gender: faker.Gender(),
 		Email:  faker.Email(),
+		X:      make([]string, 100_000),
 	}
 
 	b, err := json.Marshal(CreateKeyValuePair{Value: p})
