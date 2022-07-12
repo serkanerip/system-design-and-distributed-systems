@@ -55,6 +55,10 @@ func (m *HashMapIndex) GetCreationTime(key string) (int64, error) {
 	return data.CreationTime, nil
 }
 
+func (m *HashMapIndex) Delete(key string) {
+	delete(m.hm, key)
+}
+
 func (m *HashMapIndex) Set(key, offset string, creationTime int64) {
 	m.Lock()
 	defer m.Unlock()

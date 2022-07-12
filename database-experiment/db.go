@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	tombstoneValue = "$__TOMBSTONE__$"
+)
+
 type Database struct {
 	currentSegment                   *writableSegment
 	segmentSizeThreshold             int64
@@ -63,10 +67,13 @@ func (db *Database) Close() {
 func (db *Database) Get(key string) (interface{}, error) {
 	data, err := db.currentSegment.Read(key)
 	if err == nil {
+		if data.(string) == tombstoneValue {
+			return nil, index.ErrKeyNotFound
+		}
 		return data, nil
 	}
 	if err != index.ErrKeyNotFound {
-		return "", err
+		return nil, err
 	}
 	data, err = db.frozenSegments.FindKeyInsideSegments(key)
 	if err != nil {
@@ -129,4 +136,8 @@ func (db *Database) findSegments() {
 	}
 
 	db.frozenSegments.Sort()
+}
+
+func (db *Database) Delete(s string) error {
+	return db.Set(s, tombstoneValue)
 }

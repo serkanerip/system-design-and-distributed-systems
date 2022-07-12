@@ -44,16 +44,30 @@ func startHttpServer() {
 		key := c.Param("key")
 		val, err := database.Get(key)
 		status := 200
+		errMsg := ""
 		if err != nil {
 			status = 500
 			if err == index.ErrKeyNotFound {
+				errMsg = "Key not found!"
 				status = 404
 			}
 		}
 
 		c.JSON(status, map[string]interface{}{
 			"value": val,
+			"error": errMsg,
 		})
+	})
+
+	r.DELETE("/db/:key", func(c *gin.Context) {
+		key := c.Param("key")
+		err := database.Delete(key)
+		if err != nil {
+			log.Printf("Couldn't delete key err is: %v\n", err)
+			c.Status(500)
+			return
+		}
+		c.Status(200)
 	})
 
 	r.POST("/db/:key", func(c *gin.Context) {

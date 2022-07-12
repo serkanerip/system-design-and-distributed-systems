@@ -111,6 +111,12 @@ func (s *segment) indexTheLine(sid string, line []byte) {
 		fmt.Println("data is corrupted!")
 		return
 	}
+	fmt.Println(row.Value)
+	if row.Value.(string) == tombstoneValue {
+		fmt.Println("tombstone")
+		s.indexStrategy.Delete(row.Key)
+		return
+	}
 	s.indexStrategy.Set(row.Key, row.Offset, row.CreationTime)
 }
 

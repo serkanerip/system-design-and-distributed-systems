@@ -1,6 +1,7 @@
 package databaseexperiment
 
 import (
+	"database-experiment/index"
 	"fmt"
 	"github.com/bxcodec/faker/v3"
 	"github.com/go-playground/assert/v2"
@@ -19,6 +20,41 @@ type Person struct {
 	Gender string   `json:"gender"`
 	Email  string   `json:"email"`
 	X      []string `json:"x"`
+}
+
+func TestKeyDeletion(t *testing.T) {
+	db := NewDatabase()
+	err := db.Set("x", "y")
+	require.Nil(t, err)
+
+	deleteErr := db.Delete("x")
+	require.Nil(t, deleteErr)
+
+	value, err := db.Get("x")
+	require.Nil(t, value)
+	if err != nil {
+		return
+	}
+	require.ErrorIs(t, index.ErrKeyNotFound, err)
+}
+
+func TestKeyDeletionAfterCompactionAndMerge(t *testing.T) {
+	db := NewDatabase()
+	err := db.Set("x", "y")
+	require.Nil(t, err)
+
+	deleteErr := db.Delete("x")
+	require.Nil(t, deleteErr)
+
+	db.frozenSegments.Compaction()
+	db.frozenSegments.Merge()
+
+	value, err := db.Get("x")
+	require.Nil(t, value)
+	if err != nil {
+		return
+	}
+	require.ErrorIs(t, index.ErrKeyNotFound, err)
 }
 
 func TestDb(t *testing.T) {
